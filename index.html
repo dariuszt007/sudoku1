@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数独 PRO</title>
+
+<style>
+body {
+    text-align:center;
+    font-family:sans-serif;
+    background: linear-gradient(135deg,#74ebd5,#acb6e5);
+}
+
+h1,#timer{color:white;}
+
+#board{
+    display:grid;
+    grid-template-columns:repeat(9,1fr);
+    gap:4px;
+    max-width:360px;
+    margin:auto;
+}
+
+.cell{
+    aspect-ratio:1;
+    background:white;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    font-size:20px;
+    border-radius:8px;
+    cursor:pointer;
+}
+
+.fixed{background:#ddd;}
+.selected{background:#4dd0ff;}
+.highlight{background:#fff3a3;}
+
+#popup{
+    display:none;
+    position:absolute;
+    background:white;
+    padding:6px;
+    border-radius:10px;
+    box-shadow:0 5px 10px rgba(0,0,0,0.3);
+}
+
+#popup div{
+    display:inline-block;
+    padding:8px;
+    cursor:pointer;
+}
+
+#result{
+    background:white;
+    color:black;
+    max-width:360px;
+    margin:10px auto;
+    padding:10px;
+    border-radius:10px;
+}
+</style>
+</head>
+<body>
+
+<h1>数独 PRO</h1>
+<h2 id="timer">00:00</h2>
+
+<select id="difficulty">
+<option value="easy">簡単</option>
+<option value="medium">普通</option>
+<option value="hard">難しい</option>
+</select>
+
+<button onclick="newGame()">新しいゲーム</button>
+<button onclick="hint()">ヒント</button>
+<button onclick="check()">答え</button>
+
+<div id="board"></div>
+<div id="popup"></div>
+<p id="result"></p>
+
+<script>
+// ================= TIMER =================
+let timerInterval, time=0;
+
+function startTimer(){
+clearInterval(timerInterval);
+time=0;
+updateTimer();
+timerInterval=setInterval(()=>{
+time++;
+updateTimer();
+},1000);
+}
+
+function updateTimer(){
+let m=String(Math.floor(time/60)).padStart(2,"0");
+let s=String(time%60).padStart(2,"0");
+document.getElementById("timer").textContent=`${m}:${s}`;
+}
+
+// ================= GAME =================
+let board=[], solution=[], selectedCell=null;
+
+// generator
+function shuffle(a){return a.sort(()=>Math.random()-0.5);}
+
+function isSafe(b,r,c,n){
+for(let i=0;i<9;i++)
+if(b[r][i]==n||b[i][c]==n) return false;
+
+let sr=r-r%3, sc=c-c%3;
+for(let i=0;i<3;i++)
+for(let j=0;j<3;j++)
+if(b[sr+i][sc+j]==n) return false;
+
+return true;
+}
+
+function solve(b){
+for(let r=0;r<9;r++)
+for(let c=0;c<9;c++)
+if(b[r][c]==0){
+for(let n of shuffle([1,2,3,4,5,6,7,8,9])){
+if(isSafe(b,r,c,n)){
+b[r][c]=n;
+if(solve(b)) return true;
+b[r][c]=0;
+}}
+return false;
+}
+return true;
+}
+
+function generate(){
+let b=Array.from({length:9},()=>Array(9).fill(0));
+solve(b);
+solution=b.map(r=>r.slice());
+return b;
+}
+
+function removeCells(b,d){
+let tries=d=="easy"?30:(d=="medium"?45:60);
+let p=b.map(r=>r.slice());
+while(tries--){
+let r=Math.floor(Math.random()*9);
+let c=Math.floor(Math.random()*9);
+p[r][c]=0;
+}
+return p;
+}
+
+// draw
+function draw(){
+let el=document.getElementById("board");
+el.innerHTML="";
+for(let r=0;r<9;r++)
+for(let c=0;c<9;c++){
+let d=document.createElement("div");
+d.className="cell";
+d.dataset.r=r;
+d.dataset.c=c;
+
+if(board[r][c]!=0){
+d.textContent=board[r][c];
+d.classList.add("fixed");
+}
+
+d.onclick=()=>selectCell(d);
+el.appendChild(d);
+}
+}
+
+// selection
+function selectCell(cell){
+if(cell.classList.contains("fixed")) return;
+
+document.querySelectorAll(".cell").forEach(c=>c.classList.remove("selected","highlight"));
+cell.classList.add("selected");
+selectedCell=cell;
+
+highlightSame(cell.textContent);
+showPopup(cell);
+}
+
+function highlightSame(val){
+if(!val) return;
+document.querySelectorAll(".cell").forEach(c=>{
+if(c.textContent==val)c.classList.add("highlight");
+});
+}
+
+// ================= POPUP =================
+function showPopup(cell){
+let popup=document.getElementById("popup");
+popup.innerHTML="";
+
+let rect=cell.getBoundingClientRect();
+
+for(let n=1;n<=9;n++){
+let b=document.createElement("div");
+b.textContent=n;
+b.onclick=()=>{
+cell.textContent=n;
+popup.style.display="none";
+};
+popup.appendChild(b);
+}
+
+let del=document.createElement("div");
+del.textContent="✖";
+del.onclick=()=>{
+cell.textContent="";
+popup.style.display="none";
+};
+popup.appendChild(del);
+
+popup.style.left=rect.left+"px";
+popup.style.top=(rect.bottom+window.scrollY)+"px";
+popup.style.display="block";
+}
+
+document.addEventListener("click",(e)=>{
+if(!e.target.classList.contains("cell")){
+document.getElementById("popup").style.display="none";
+}
+});
+
+// ================= HELPERS =================
+function getCellValue(r,c){
+let el=document.querySelector(`.cell[data-r='${r}'][data-c='${c}']`);
+return parseInt(el.textContent)||0;
+}
+
+function getCandidates(r,c){
+let p=[1,2,3,4,5,6,7,8,9];
+
+for(let i=0;i<9;i++){
+p=p.filter(n=>n!=getCellValue(r,i));
+p=p.filter(n=>n!=getCellValue(i,c));
+}
+
+let sr=r-r%3, sc=c-c%3;
+for(let i=0;i<3;i++)
+for(let j=0;j<3;j++)
+p=p.filter(n=>n!=getCellValue(sr+i,sc+j));
+
+return p;
+}
+
+// ================= SOLVER =================
+function findSingle(){
+for(let r=0;r<9;r++)
+for(let c=0;c<9;c++){
+if(getCellValue(r,c)==0){
+let cand=getCandidates(r,c);
+if(cand.length==1) return {r,c,num:cand[0]};
+}}
+return null;
+}
+
+// ================= HINT =================
+function hint(){
+if(!selectedCell){
+result("⚠️ マスを選択してください");
+return;
+}
+
+let r=parseInt(selectedCell.dataset.r);
+let c=parseInt(selectedCell.dataset.c);
+
+let cand=getCandidates(r,c);
+
+if(cand.length==1){
+selectedCell.textContent=cand[0];
+result(`💡 ${cand[0]} が入ります`);
+}else{
+result(`🤔 候補: ${cand.join(", ")}`);
+}
+}
+
+// ================= UI =================
+function result(t){
+document.getElementById("result").textContent=t;
+}
+
+function newGame(){
+let d=document.getElementById("difficulty").value;
+board=removeCells(generate(),d);
+draw();
+startTimer();
+result("");
+}
+
+function check(){
+clearInterval(timerInterval);
+document.querySelectorAll(".cell").forEach(c=>{
+let r=c.dataset.r, col=c.dataset.c;
+c.textContent=solution[r][col];
+});
+result("✅ 完成!");
+}
+
+newGame();
+</script>
+
+</body>
+</html>
